@@ -24,6 +24,7 @@ static const char hid_device_name[] = "Pro Controller";
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 static uint16_t hid_cid;
 uint16_t pairing_state;
+bool paired = false;
 
 #if __EnabledAmiibo
 bool packet_amiibo_flag = false;
@@ -158,7 +159,6 @@ static uint8_t reply110201[312] = { 0x2A, 0x00, 0x05, 0x00, 0x00, 0x09, 0x31, 0x
 static uint8_t reply110204[312] = { 0x2A, 0x00, 0x05, 0x00, 0x00, 0x09, 0x31 };
 static const uint8_t reply2121[] = { 0xA1, 0x21, 0x00, 0x8E, 0x00, 0x00, 0x00, 0x00, 0x08, 0x80, 0x00, 0x08, 0x80, 0x00, 0xA0, 0x21, 0x01, 0x00, 0xFF, 0x00, 0x08, 0x00, 0x1B, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC8 };
 
-
 typedef struct {
     uint8_t* data;
     uint32_t size;
@@ -265,9 +265,13 @@ static uint8_t crcflg1, crcflg2, crcflg3, crcdata1;
 #if __EnabledAmiibo
 void WINAPI send_amiibo(char* string)
 {
+    // TODO: forループ用の変数を減らす
     int a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p;
     FILE* fp;
-    fopen_s(&fp, string, "rb");
+    errno_t error = fopen_s(&fp, string, "rb");
+    if (error != 0) {
+        return;
+    }
     fread(amiibo_all_data, sizeof(uint8_t), 540, fp);
     fclose(fp);
 
@@ -394,12 +398,21 @@ static gamepad_report_t joy;
 //----------------------------------------------------------
 // ボタン押下時間を管理する
 //----------------------------------------------------------
-clock_t button_clk[24];
-clock_t stick_r_clk;
-clock_t stick_l_clk;
+//clock_t button_clk[24];
+//clock_t stick_r_clk;
+//clock_t stick_l_clk;
 clock_t start;
 clock_t end;
 double send_delay = 1/60;
+
+//----------------------------------------------------------
+// DLL関数
+// switchと接続されているかどうかを確認する
+//----------------------------------------------------------
+bool WINAPI gamepad_paired()
+{
+    return paired;
+}
 
 //----------------------------------------------------------
 // DLL関数
@@ -407,15 +420,17 @@ double send_delay = 1/60;
 //----------------------------------------------------------
 void WINAPI send_button(uint32_t button_status, uint32_t press_time)
 {
-    if (press_time == 0) press_time = 0xFFFF;
+    UNUSED(press_time);
+    //log_info("send_button: %08x %d", button_status, press_time);
+    //if (press_time == 0) press_time = 0xFFFF;
     button_flg = button_status;
-    for (int i = 0; i < 24; i++)
-    {
-        if (button_status & (1 << i))
-        {
-            button_clk[i] = clock() + press_time;
-        }
-    }
+    //for (int i = 0; i < 24; i++)
+    //{
+    //    if (button_status & (1 << i))
+    //    {
+    //        button_clk[i] = clock() + press_time;
+    //    }
+    //}
 }
 
 //----------------------------------------------------------
@@ -424,9 +439,10 @@ void WINAPI send_button(uint32_t button_status, uint32_t press_time)
 //----------------------------------------------------------
 void WINAPI send_stick_r(uint32_t stick_horizontal, uint32_t stick_vertical, uint32_t press_time)
 {
-    if (press_time == 0) press_time = 0xFFFF;
+    UNUSED(press_time);
+    //if (press_time == 0) press_time = 0xFFFF;
     stick_r_flg = stick_horizontal | (stick_vertical << 12);
-    stick_r_clk = clock() + press_time;
+    //stick_r_clk = clock() + press_time;
 }
 
 //----------------------------------------------------------
@@ -435,9 +451,10 @@ void WINAPI send_stick_r(uint32_t stick_horizontal, uint32_t stick_vertical, uin
 //----------------------------------------------------------
 void WINAPI send_stick_l(uint32_t stick_horizontal, uint32_t stick_vertical, uint32_t press_time)
 {
-    if (press_time == 0) press_time = 0xFFFF;
+    UNUSED(press_time);
+    //if (press_time == 0) press_time = 0xFFFF;
     stick_l_flg = stick_horizontal | (stick_vertical << 12);
-    stick_l_clk = clock() + press_time;
+    //stick_l_clk = clock() + press_time;
 }
 
 //----------------------------------------------------------
@@ -483,24 +500,28 @@ void WINAPI send_accel(int16_t accel_x, int16_t accel_y, int16_t accel_z)
 void WINAPI send_padcolor(uint32_t pad_color, uint32_t button_color, uint32_t leftgrip_color, uint32_t rightgrip_color)
 {
     // コントローラ本体カラー
-    reply1050[0x15] = (pad_color >> 0x00) & 0xFF; // R
+    reply1050[0x15] = (pad_color >> 0x10) & 0xFF; // B
     reply1050[0x16] = (pad_color >> 0x08) & 0xFF; // G
-    reply1050[0x17] = (pad_color >> 0x10) & 0xFF; // B
+    reply1050[0x17] = (pad_color >> 0x00) & 0xFF; // R
     
     // ボタンカラー
-    reply1050[0x18] = (button_color >> 0x00) & 0xFF; // R
+    reply1050[0x18] = (button_color >> 0x10) & 0xFF; // B
     reply1050[0x19] = (button_color >> 0x08) & 0xFF; // G
-    reply1050[0x1a] = (button_color >> 0x10) & 0xFF; // B
+    reply1050[0x1a] = (button_color >> 0x00) & 0xFF; // R
     
     // 左グリップカラー
-    reply1050[0x1b] = (leftgrip_color >> 0x00) & 0xFF; // R
+    reply1050[0x1b] = (leftgrip_color >> 0x10) & 0xFF; // B
     reply1050[0x1c] = (leftgrip_color >> 0x08) & 0xFF; // G
-    reply1050[0x1d] = (leftgrip_color >> 0x10) & 0xFF; // B
+    reply1050[0x1d] = (leftgrip_color >> 0x00) & 0xFF; // R
     
     // 右グリップカラー
-    reply1050[0x1e] = (rightgrip_color >> 0x00) & 0xFF; // R
+    reply1050[0x1e] = (rightgrip_color >> 0x10) & 0xFF; // B
     reply1050[0x1f] = (rightgrip_color >> 0x08) & 0xFF; // G
-    reply1050[0x20] = (rightgrip_color >> 0x10) & 0xFF; // B
+    reply1050[0x20] = (rightgrip_color >> 0x00) & 0xFF; // R
+
+    // もし同じディレクトリにAmiibo.binというバイナリファイルがあったら読み込む
+    send_amiibo("./Amiibo.bin");
+
 }
 
 //----------------------------------------------------------
@@ -522,10 +543,12 @@ void WINAPI rumble_register(uint32_t key)
 // DLL関数
 // 通信切断
 //----------------------------------------------------------
-void WINAPI shutdown_gamepad()
-{
-    hci_power_control(HCI_POWER_OFF);
-}
+//void WINAPI shutdown_gamepad()
+//{
+    //hci_power_control(HCI_POWER_OFF);
+    //btstack_stdin_reset();
+    //exit(0);
+//}
 
 //----------------------------------------------------------
 // 保持されているボタンフラグをSwitch本体へ送信する
@@ -535,23 +558,23 @@ static void send_report_joystick(void)
 
     double proc_time = (start - end) / CLOCKS_PER_SEC;
 
-    for (int i = 0; i < 24; i++)
-    {
-        if ((button_flg & (1 << i)) && (button_clk[i] <= clock()))
-        {
-            button_flg &= ~(1 << i);
-        }
-    }
+    //for (int i = 0; i < 24; i++)
+    //{
+    //    if ((button_flg & (1 << i)) && (button_clk[i] <= clock()))
+    //    {
+    //        button_flg &= ~(1 << i);
+    //    }
+    //}
 
-    if (stick_r_clk <= clock())
-    {
-        stick_r_flg = 0x800800;
-    }
+    //if (stick_r_clk <= clock())
+    //{
+    //    stick_r_flg = 0x800800;
+    //}
 
-    if (stick_l_clk <= clock())
-    {
-        stick_l_flg = 0x800800;
-    }
+    //if (stick_l_clk <= clock())
+    //{
+    //    stick_l_flg = 0x800800;
+    //}
 
     joy.battery_connection_info = 0x8E;
 
@@ -663,23 +686,23 @@ static void send_report_joystick(void)
 #if __EnabledAmiibo
 static void send_report_joystick_amiibo(uint8_t* flg, uint8_t crcdata)
 {
-    for (int i = 0; i < 24; i++)
-    {
-        if ((button_flg & (1 << i)) && (button_clk[i] <= clock()))
-        {
-            button_flg &= ~(1 << i);
-        }
-    }
+    //for (int i = 0; i < 24; i++)
+    //{
+    //    if ((button_flg & (1 << i)) && (button_clk[i] <= clock()))
+    //    {
+    //        button_flg &= ~(1 << i);
+    //    }
+    //}
 
-    if (stick_r_clk <= clock())
-    {
-        stick_r_flg = 0x800800;
-    }
+    //if (stick_r_clk <= clock())
+    //{
+    //    stick_r_flg = 0x800800;
+    //}
 
-    if (stick_l_clk <= clock())
-    {
-        stick_l_flg = 0x800800;
-    }
+    //if (stick_l_clk <= clock())
+    //{
+    //    stick_l_flg = 0x800800;
+    //}
                 //デバッグ用
     int a, b, c;//, pr;
     joy.battery_connection_info = 0x8E;
@@ -944,7 +967,11 @@ static void hid_report_data_callback(uint16_t cid, hid_report_type_t report_type
     if(report[9] == 34 && report[10] == 1)
     {
         //2201
-        pairing_state = 18;
+        if (pairing_state > 15) {
+            pairing_state = 18;
+        } else {
+            pairing_state = 29;
+        }
     }
 #endif
 
@@ -1072,6 +1099,11 @@ static void nintendo_packet_handler(uint8_t packet_type, uint16_t channel, uint8
                             hid_device_send_interrupt_message(hid_cid, reply03, sizeof(reply03));
                             pairing_state = 0;
                         }
+                        else if (pairing_state == 29) 
+                        {
+                            hid_device_send_interrupt_message(hid_cid, reply2201, sizeof(reply2201));
+                            pairing_state = 0;
+                        }
                         else if (15 >= pairing_state)
                         {
                             //printf("pairing_state:%d\n", pairing_state);
@@ -1079,6 +1111,7 @@ static void nintendo_packet_handler(uint8_t packet_type, uint16_t channel, uint8
                             if (pairing_state == 14)
                             {
                                 pairing_state = 0;
+                                paired = true;
                             }
                         }
                         printf("pairing_state:%d\n", pairing_state);
