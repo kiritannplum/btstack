@@ -112,7 +112,7 @@ static void packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *pack
     }
 }
 
-static void trigger_shutdown(void){
+void trigger_shutdown(void){
     printf("CTRL-C - SIGINT received, shutting down..\n");
     log_info("sigint_handler: shutting down");
     shutdown_triggered = true;
@@ -138,11 +138,11 @@ int main(int argc, const char * argv[]){
     btstack_run_loop_init(btstack_run_loop_windows_get_instance());
 
     // log into file using HCI_DUMP_PACKETLOGGER format
-    const char * pklg_path = "hci_dump.pklg";
-    hci_dump_windows_fs_open(pklg_path, HCI_DUMP_PACKETLOGGER);
-    const hci_dump_t * hci_dump_impl = hci_dump_windows_fs_get_instance();
-    hci_dump_init(hci_dump_impl);
-    printf("Packet Log: %s\n", pklg_path);
+    //const char * pklg_path = "hci_dump.pklg";
+    //hci_dump_windows_fs_open(pklg_path, HCI_DUMP_PACKETLOGGER);
+    //const hci_dump_t * hci_dump_impl = hci_dump_windows_fs_get_instance();
+    //hci_dump_init(hci_dump_impl);
+    //printf("Packet Log: %s\n", pklg_path);
 
     // init HCI
     hci_init(hci_transport_usb_instance(), NULL);
@@ -162,4 +162,12 @@ int main(int argc, const char * argv[]){
     btstack_run_loop_execute();
 
     return 0;
+}
+
+void start_gamepad(void){
+    main(0, NULL);
+}
+
+void shutdown_gamepad(void){
+    trigger_shutdown();
 }
