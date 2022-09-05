@@ -519,9 +519,6 @@ void WINAPI send_padcolor(uint32_t pad_color, uint32_t button_color, uint32_t le
     reply1050[0x1f] = (rightgrip_color >> 0x08) & 0xFF; // G
     reply1050[0x20] = (rightgrip_color >> 0x00) & 0xFF; // R
 
-    // もし同じディレクトリにAmiibo.binというバイナリファイルがあったら読み込む
-    send_amiibo("./Amiibo.bin");
-
 }
 
 //----------------------------------------------------------
